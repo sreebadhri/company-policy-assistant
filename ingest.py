@@ -2,10 +2,10 @@
 
 Built step by step:
     Step 1: load documents from data/
-    Step 2 (this version): clean and split them into chunks   <- you are here
-    Step 3: embed the chunks and store them in Chroma
+    Step 2: clean and split them into chunks
+    Step 3 (this version): embed the chunks and store them in Chroma   <- you are here
 
-Run:
+Run (needs OPENAI_API_KEY):
     .venv/bin/python ingest.py
 """
 
@@ -15,6 +15,8 @@ from pathlib import Path
 import docx2txt
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from vector_store import CHROMA_DIR, get_vector_store
 from pypdf import PdfReader
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -123,6 +125,16 @@ def split_documents(documents: list[Document]) -> list[Document]:
     return chunks
 
 
+# --- Step 3: embed and store ----------------------------------------------
+
+
+def store_chunks(chunks: list[Document]) -> None:
+    """Rebuild the collection from scratch, so reruns leave no old chunks."""
+    store = get_vector_store()
+    store.reset_collection()
+    store.add_documents(chunks)  # embeds each chunk with the OpenAI API
+
+
 def main() -> None:
     print(f"Loading documents from {DATA_DIR}/ ...")
     documents = load_documents()
@@ -144,6 +156,9 @@ def main() -> None:
     for chunk in chunks:
         if chunk.metadata["source"] == first["source"] and chunk.metadata.get("page") == first.get("page"):
             print(f"{chunk.metadata}\n{chunk.page_content}\n")
+
+    store_chunks(chunks)
+    print(f"Stored {len(chunks)} chunks in {CHROMA_DIR}/")
 
 
 if __name__ == "__main__":
