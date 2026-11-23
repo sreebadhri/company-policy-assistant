@@ -18,6 +18,8 @@ export OPENAI_API_KEY=...   # see .env.example
 .venv/bin/python agent.py           # chat
 .venv/bin/python agent.py --debug   # chat, showing tool calls
 .venv/bin/python search.py "How many vacation days do I get?"   # search only, no LLM
+.venv/bin/python evaluate.py             # score search on the test questions
+.venv/bin/python evaluate.py --answers   # also score the agent's answers
 ```
 
 Run `ingest.py` again whenever the documents in `data/` change. The document
