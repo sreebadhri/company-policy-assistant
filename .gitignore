@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Secrets - never commit API keys
+.env
+.env.*
+!.env.example
+
+# Generated vector database (rebuild with: python ingest.py)
+chroma_db/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
