@@ -14,6 +14,11 @@ export OPENAI_API_KEY=...   # see .env.example
 ## Run
 
 ```bash
+.venv/bin/python ingest.py          # build the vector database (run this first)
 .venv/bin/python agent.py           # chat
 .venv/bin/python agent.py --debug   # chat, showing tool calls
+.venv/bin/python search.py "How many vacation days do I get?"   # search only, no LLM
 ```
+
+Run `ingest.py` again whenever the documents in `data/` change. The document
+text and your questions are sent to the OpenAI API.
