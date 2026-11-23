@@ -116,13 +116,7 @@ def split_documents(documents: list[Document]) -> list[Document]:
         separators=[r"\n\n", r"(?<=\.)\n", r"\n", " ", ""],
         is_separator_regex=True,
     )
-    chunks = splitter.split_documents(documents)
-    for chunk in chunks:
-        # Put the title and section in the text so search can match on them.
-        if "title" in chunk.metadata:
-            heading = f"{chunk.metadata['title']} > {chunk.metadata['section']}"
-            chunk.page_content = f"{heading}\n{chunk.page_content}"
-    return chunks
+    return splitter.split_documents(documents)
 
 
 # --- Step 3: embed and store ----------------------------------------------
