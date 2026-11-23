@@ -1,4 +1,4 @@
-# HR Policy RAG
+# Company Policy Assistant
 
 A chatbot that answers employee questions about company policies, built with
 LangChain and OpenAI. Policy documents live in `data/`.

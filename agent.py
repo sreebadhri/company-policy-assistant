@@ -1,4 +1,7 @@
-"""A simple LangChain agent backed by OpenAI, with two HR-policy tools.
+"""Company policy assistant: a terminal chatbot built with LangChain and OpenAI.
+
+The agent will answer from the company documents once document search is
+added (Step 5 of the RAG plan). Until then it has no tools and says so.
 
 Run (needs OPENAI_API_KEY; override the model with OPENAI_MODEL):
     .venv/bin/python agent.py            # chat
@@ -11,77 +14,60 @@ import uuid
 
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
-from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 
-# Stand-in for a real policy store (later: swap for a vector-store retriever).
-POLICIES = {
-    "vacation": "Full-time employees accrue 15 vacation days per year, "
-    "increasing to 20 days after 3 years of service and 25 after 7 years.",
-    "sick leave": "Employees receive 10 paid sick days per year. "
-    "A doctor's note is required for absences longer than 3 consecutive days.",
-    "remote work": "Employees may work remotely up to 3 days per week "
-    "with manager approval.",
-    "parental leave": "Primary caregivers receive 16 weeks of paid leave; "
-    "secondary caregivers receive 6 weeks.",
-}
+DEFAULT_MODEL = "gpt-5.4-mini-2026-03-17"
 
-
-@tool
-def lookup_policy(topic: str) -> str:
-    """Look up the company HR policy for a topic.
-
-    Known topics: vacation, sick leave, remote work, parental leave.
-    """
-    key = topic.lower().strip()
-    for name, text in POLICIES.items():
-        if name in key or key in name:
-            return text
-    return f"No policy found for '{topic}'. Known topics: {', '.join(POLICIES)}."
-
-
-@tool
-def calculate_days(total_days: float, days_used: float) -> float:
-    """Return how many leave days remain given the allowance and days already used."""
-    return total_days - days_used
-
-
-model = ChatOpenAI(model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini-2026-03-17"))
-
-agent = create_agent(
-    model=model,
-    tools=[lookup_policy, calculate_days],
-    system_prompt=(
-        "You are an HR assistant. Answer questions using the lookup_policy tool; "
-        "do not invent policy details. Use calculate_days for leave arithmetic. "
-        "Keep answers short."
-    ),
-    # Keeps the conversation history so follow-up questions have context.
-    checkpointer=InMemorySaver(),
+SYSTEM_PROMPT = (
+    "You are the company policy assistant. Answer employee questions about "
+    "company policies. You do not have access to the policy documents yet, so "
+    "do not guess policy details: say you can't look them up yet. "
+    "Keep answers short."
 )
 
+EXIT_COMMANDS = {"/quit", "/exit", "quit", "exit"}
 
-def ask(question: str, thread_id: str, show_tools: bool) -> str:
+
+def build_agent():
+    """Create the agent. The checkpointer keeps each conversation's history,
+    so follow-up questions have context."""
+    model = ChatOpenAI(model=os.getenv("OPENAI_MODEL", DEFAULT_MODEL))
+    return create_agent(
+        model=model,
+        tools=[],  # Step 5 adds the document search tool here.
+        system_prompt=SYSTEM_PROMPT,
+        checkpointer=InMemorySaver(),
+    )
+
+
+def print_tool_activity(messages) -> None:
+    """Print the tool calls and results from one turn (used with --debug)."""
+    for msg in messages:
+        if msg.type == "ai" and msg.tool_calls:
+            for call in msg.tool_calls:
+                print(f"  [tool] {call['name']}({call['args']})")
+        elif msg.type == "tool":
+            print(f"  [result] {msg.content}")
+
+
+def ask(agent, question: str, thread_id: str, debug: bool = False) -> str:
     """Send one user message in the given conversation and return the reply."""
     config = {"configurable": {"thread_id": thread_id}}
-    before = len(agent.get_state(config).values.get("messages", []))
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": question}]}, config
-    )
-    if show_tools:
-        for msg in result["messages"][before:]:
-            if msg.type == "ai" and msg.tool_calls:
-                for call in msg.tool_calls:
-                    print(f"  [tool] {call['name']}({call['args']})")
-            elif msg.type == "tool":
-                print(f"  [result] {msg.content}")
+    history_length = len(agent.get_state(config).values.get("messages", []))
+
+    result = agent.invoke({"messages": [{"role": "user", "content": question}]}, config)
+
+    if debug:
+        print_tool_activity(result["messages"][history_length:])
     return result["messages"][-1].text
 
 
 def main() -> None:
-    show_tools = "--debug" in sys.argv
+    debug = "--debug" in sys.argv
+    agent = build_agent()
     thread_id = str(uuid.uuid4())
-    print("HR Assistant - ask me about company policies.")
+
+    print("Company Policy Assistant - ask me about company policies.")
     print("Commands: /new (start over), /quit (exit)\n")
 
     while True:
@@ -90,19 +76,21 @@ def main() -> None:
         except (EOFError, KeyboardInterrupt):
             print("\nBye!")
             break
+
         if not question:
             continue
-        if question.lower() in ("/quit", "/exit", "quit", "exit"):
+        if question.lower() in EXIT_COMMANDS:
             print("Bye!")
             break
         if question.lower() == "/new":
             thread_id = str(uuid.uuid4())
             print("(Started a new conversation)\n")
             continue
+
         try:
-            print(f"Bot: {ask(question, thread_id, show_tools)}\n")
-        except Exception as e:  # keep the chat alive on API/network errors
-            print(f"Bot: Sorry, something went wrong: {e}\n")
+            print(f"Bot: {ask(agent, question, thread_id, debug)}\n")
+        except Exception as error:  # keep the chat alive on API/network errors
+            print(f"Bot: Sorry, something went wrong: {error}\n")
 
 
 if __name__ == "__main__":
